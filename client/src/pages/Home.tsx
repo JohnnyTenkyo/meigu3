@@ -112,7 +112,11 @@ export default function Home() {
           ) : q ? (
             <>
               <span className="data-mono font-medium">${q.price.toFixed(2)}</span>
-              <span className={`data-mono text-xs px-2 py-0.5 rounded ${q.change >= 0 ? 'bg-up/10 text-up' : 'bg-down/10 text-down'}`}>
+              <span className={`data-mono text-xs px-2 py-0.5 rounded font-medium ${
+                q.change >= 0 
+                  ? 'text-red-500 bg-red-500/10' 
+                  : 'text-green-500 bg-green-500/10'
+              }`}>
                 {q.changePercent >= 0 ? '+' : ''}{q.changePercent.toFixed(2)}%
               </span>
             </>
@@ -148,7 +152,11 @@ export default function Home() {
             <span className="data-mono text-lg font-bold">
               {q.price >= 10000 ? q.price.toFixed(0) : q.price.toFixed(2)}
             </span>
-            <span className={`data-mono text-sm font-medium px-2 py-0.5 rounded ${q.change >= 0 ? 'bg-up/10 text-up' : 'bg-down/10 text-down'}`}>
+            <span className={`data-mono text-sm font-medium px-2 py-0.5 rounded ${
+              q.change >= 0 
+                ? 'text-red-500 bg-red-500/10' 
+                : 'text-green-500 bg-green-500/10'
+            }`}>
               {q.changePercent >= 0 ? '+' : ''}{q.changePercent.toFixed(2)}%
             </span>
           </div>

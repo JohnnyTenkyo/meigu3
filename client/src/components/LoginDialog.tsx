@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
-import { getLoginUrl } from '@/const';
+import { useAuth } from '@/contexts/AuthContext';
+import { useState } from 'react';
 
 interface LoginDialogProps {
   open: boolean;
@@ -8,10 +9,24 @@ interface LoginDialogProps {
 }
 
 export default function LoginDialog({ open, onClose }: LoginDialogProps) {
+  const { login } = useAuth();
+  const [username, setUsername] = useState('');
+
   if (!open) return null;
 
   const handleLogin = () => {
-    window.location.href = getLoginUrl();
+    if (username.trim()) {
+      login(username);
+      setUsername('');
+      onClose();
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleKeyPress(e);
+      handleLogin();
+    }
   };
 
   return (
@@ -21,12 +36,27 @@ export default function LoginDialog({ open, onClose }: LoginDialogProps) {
           <X size={18} />
         </button>
         <h2 className="text-lg font-semibold mb-1">登录</h2>
-        <p className="text-sm text-muted-foreground mb-4">登录后可使用收藏和更多功能</p>
+        <p className="text-sm text-muted-foreground mb-4">输入用户名以使用收藏功能</p>
         
         <div className="space-y-3">
-          <Button onClick={handleLogin} className="w-full">使用 Manus 账号登录</Button>
+          <input
+            type="text"
+            placeholder="请输入用户名"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            onKeyPress={handleKeyPress}
+            className="w-full px-3 py-2 rounded-md border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            autoFocus
+          />
+          <Button 
+            onClick={handleLogin} 
+            className="w-full"
+            disabled={!username.trim()}
+          >
+            登录
+          </Button>
           <p className="text-xs text-center text-muted-foreground">
-            登录即表示您同意我们的服务条款和隐私政策
+            无需密码，输入用户名即可登录
           </p>
         </div>
       </div>

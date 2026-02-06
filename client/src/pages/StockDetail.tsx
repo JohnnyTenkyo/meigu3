@@ -94,7 +94,11 @@ export default function StockDetail() {
               {quote && (
                 <div className="flex items-center gap-2 text-sm">
                   <span className="data-mono font-semibold text-lg">${quote.price.toFixed(2)}</span>
-                  <span className={`data-mono ${quote.change >= 0 ? 'text-up' : 'text-down'}`}>
+                  <span className={`data-mono font-medium ${
+                    quote.change >= 0 
+                      ? 'text-red-500' 
+                      : 'text-green-500'
+                  }`}>
                     {quote.change >= 0 ? '+' : ''}{quote.change.toFixed(2)} ({quote.changePercent >= 0 ? '+' : ''}{quote.changePercent.toFixed(2)}%)
                   </span>
                 </div>
