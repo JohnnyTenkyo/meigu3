@@ -41,6 +41,7 @@ export default function StockDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
+  const [momentum, setMomentum] = useState<any>(null);
 
   // Fetch data
   useEffect(() => {
@@ -64,6 +65,22 @@ export default function StockDetail() {
 
     return () => { cancelled = true; };
   }, [symbol, interval]);
+
+  // Fetch momentum data
+  useEffect(() => {
+    const fetchMomentum = async () => {
+      try {
+        const response = await fetch(`/api/trpc/stock.getMomentum?input=${encodeURIComponent(JSON.stringify({symbol}))}`);
+        if (response.ok) {
+          const data = await response.json();
+          setMomentum(data.result?.data || null);
+        }
+      } catch (err) {
+        console.error('Failed to fetch momentum:', err);
+      }
+    };
+    fetchMomentum();
+  }, [symbol]);
 
   // Calculate indicators
   const cdSignals = useMemo<CDSignal[]>(() => calculateCDSignals(candles), [candles]);
@@ -152,6 +169,7 @@ export default function StockDetail() {
               interval={interval}
               cdSignals={cdSignals}
               buySellPressure={buySellPressure}
+              momentum={momentum}
               height={380}
             />
 

@@ -9,6 +9,7 @@ interface StockChartProps {
   interval: TimeInterval;
   cdSignals: CDSignal[];
   buySellPressure: BuySellPressure[];
+  momentum?: { buyLine: number; sellLine: number; diffBar: number; trend: string };
   height?: number;
 }
 
@@ -17,13 +18,15 @@ function toChartTime(ts: number, interval: TimeInterval): Time {
   return (futuTs / 1000) as Time;
 }
 
-export default function StockChart({ candles, interval, cdSignals, buySellPressure, height = 400 }: StockChartProps) {
+export default function StockChart({ candles, interval, cdSignals, buySellPressure, momentum, height = 400 }: StockChartProps) {
   const mainChartRef = useRef<HTMLDivElement>(null);
   const macdChartRef = useRef<HTMLDivElement>(null);
   const pressureChartRef = useRef<HTMLDivElement>(null);
+  const momentumChartRef = useRef<HTMLDivElement>(null);
   const mainChartApi = useRef<IChartApi | null>(null);
   const macdChartApi = useRef<IChartApi | null>(null);
   const pressureChartApi = useRef<IChartApi | null>(null);
+  const momentumChartApi = useRef<IChartApi | null>(null);
 
   const chartOptions = useMemo(() => ({
     layout: {
@@ -286,20 +289,86 @@ export default function StockChart({ candles, interval, cdSignals, buySellPressu
     };
   }, [buySellPressure, interval, chartOptions]);
 
+  // Momentum sub-chart
+  useEffect(() => {
+    if (!momentumChartRef.current || !momentum) return;
+
+    if (momentumChartApi.current) {
+      momentumChartApi.current.remove();
+      momentumChartApi.current = null;
+    }
+
+    const chart = createChart(momentumChartRef.current, {
+      ...chartOptions,
+      width: momentumChartRef.current.clientWidth,
+      height: 150,
+    });
+    momentumChartApi.current = chart;
+
+    // Yellow line: cumulative buy orders
+    const buySeries = chart.addLineSeries({ 
+      color: '#fbbf24', 
+      lineWidth: 2, 
+      title: '\u4e70\u5355\u7d2f\u8ba1' 
+    });
+    const buyData: LineData[] = candles.map(c => ({
+      time: toChartTime(c.time, interval),
+      value: momentum.buyLine || 0,
+    }));
+    buySeries.setData(buyData);
+
+    // Green line: cumulative sell orders
+    const sellSeries = chart.addLineSeries({ 
+      color: '#22c55e', 
+      lineWidth: 2, 
+      title: '\u5356\u5355\u7d2f\u8ba1' 
+    });
+    const sellData: LineData[] = candles.map(c => ({
+      time: toChartTime(c.time, interval),
+      value: momentum.sellLine || 0,
+    }));
+    sellSeries.setData(sellData);
+
+    // Red/Green histogram: bid-ask difference
+    const diffSeries = chart.addHistogramSeries({
+      color: momentum.diffBar >= 0 ? '#ef4444' : '#22c55e',
+      title: '\u4e70\u5356\u5dee',
+    });
+    const diffData: HistogramData[] = candles.map(c => ({
+      time: toChartTime(c.time, interval),
+      value: momentum.diffBar || 0,
+      color: momentum.diffBar >= 0 ? '#ef4444' : '#22c55e',
+    }));
+    diffSeries.setData(diffData);
+
+    chart.timeScale().fitContent();
+
+    const handleResize = () => {
+      if (momentumChartRef.current) chart.applyOptions({ width: momentumChartRef.current.clientWidth });
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart.remove();
+      momentumChartApi.current = null;
+    };
+  }, [momentum, interval, chartOptions, candles]);
+
   // Sync time scales
   useEffect(() => {
-    const charts = [mainChartApi.current, macdChartApi.current, pressureChartApi.current].filter(Boolean) as IChartApi[];
-    if (charts.length < 2) return;
+    const allCharts = [mainChartApi.current, macdChartApi.current, pressureChartApi.current, momentumChartApi.current].filter(Boolean) as IChartApi[];
+    if (allCharts.length < 2) return;
 
     const syncFns: Array<{ chart: IChartApi; fn: (range: any) => void }> = [];
-    for (let i = 0; i < charts.length; i++) {
-      for (let j = 0; j < charts.length; j++) {
+    for (let i = 0; i < allCharts.length; i++) {
+      for (let j = 0; j < allCharts.length; j++) {
         if (i === j) continue;
         const fn = (range: any) => {
-          if (range) charts[j].timeScale().setVisibleLogicalRange(range);
+          if (range) allCharts[j].timeScale().setVisibleLogicalRange(range);
         };
-        charts[i].timeScale().subscribeVisibleLogicalRangeChange(fn);
-        syncFns.push({ chart: charts[i], fn });
+        allCharts[i].timeScale().subscribeVisibleLogicalRangeChange(fn);
+        syncFns.push({ chart: allCharts[i], fn });
       }
     }
 
@@ -308,7 +377,7 @@ export default function StockChart({ candles, interval, cdSignals, buySellPressu
         try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(fn); } catch {}
       });
     };
-  }, [candles, buySellPressure]);
+  }, [candles, buySellPressure, momentum]);
 
   return (
     <div className="space-y-1">
@@ -333,6 +402,17 @@ export default function StockChart({ candles, interval, cdSignals, buySellPressu
         <span className="text-xs">双位数上涨 = 动能强劲 ⚡ | 双位数下跌 = 动能衰竭 💀</span>
       </div>
       <div ref={pressureChartRef} className="w-full rounded-md overflow-hidden border border-border" />
+      
+      {momentum && (
+        <>
+          <div className="text-xs text-muted-foreground px-2 py-1 flex items-center gap-2">
+            <span className="font-medium text-cyan-400">副图</span>
+            <span className="text-cyan-400">买卖动能</span>
+            <span className="text-xs">黄线=买单 | 绿线=卖单 | 红柱=买压 | 绿柱=卖压</span>
+          </div>
+          <div ref={momentumChartRef} className="w-full rounded-md overflow-hidden border border-border" />
+        </>
+      )}
     </div>
   );
 }

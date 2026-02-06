@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { publicProcedure, router } from "./_core/trpc";
 import axios from "axios";
+import { calculateMomentum, formatMomentumForChart } from "./tradingMomentum";
 
 // In-memory cache
 const cache: Map<string, { data: any; expires: number }> = new Map();
@@ -330,5 +331,31 @@ export const stockRouter = router({
       }
 
       return results;
+    }),
+
+  getMomentum: publicProcedure
+    .input(z.object({
+      symbol: z.string(),
+    }))
+    .query(async ({ input }) => {
+      const cacheKey = `momentum:${input.symbol}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return cached;
+
+      const momentum = await calculateMomentum(input.symbol);
+      if (!momentum) {
+        return {
+          error: `Failed to calculate momentum for ${input.symbol}`,
+          symbol: input.symbol,
+          buyLine: 0,
+          sellLine: 0,
+          diffBar: 0,
+          trend: "中立",
+        };
+      }
+
+      const formatted = formatMomentumForChart(momentum);
+      setCache(cacheKey, formatted, 1800000);
+      return formatted;
     }),
 });
