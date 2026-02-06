@@ -53,13 +53,17 @@ export default function Screener() {
   const [ladderEnabled, setLadderEnabled] = useState(false);
   const [ladderLevels, setLadderLevels] = useState<TimeInterval[]>(['4h']);
 
+  // Momentum (买卖动能)
+  const [momentumEnabled, setMomentumEnabled] = useState(false);
+  const [momentumType, setMomentumType] = useState<'strong_buy' | 'weak_buy' | 'neutral' | 'weak_sell' | 'strong_sell'>('strong_buy');
+
   const toggleLevel = (setter: React.Dispatch<React.SetStateAction<TimeInterval[]>>, level: TimeInterval) => {
     setter(prev =>
       prev.includes(level) ? prev.filter(l => l !== level) : [...prev, level]
     );
   };
 
-  const hasCondition = (bspEnabled && bspLevels.length > 0) || (cdEnabled && cdLevels.length > 0) || (ladderEnabled && ladderLevels.length > 0);
+  const hasCondition = (bspEnabled && bspLevels.length > 0) || (cdEnabled && cdLevels.length > 0) || (ladderEnabled && ladderLevels.length > 0) || momentumEnabled;
 
   const runScreener = useCallback(async () => {
     if (!hasCondition) return;
@@ -67,7 +71,7 @@ export default function Screener() {
     setResults([]);
 
     // Get enabled conditions count
-    const enabledConditionsCount = [bspEnabled, cdEnabled, ladderEnabled].filter(Boolean).length;
+    const enabledConditionsCount = [bspEnabled, cdEnabled, ladderEnabled, momentumEnabled].filter(Boolean).length;
 
     const stocksToScan = US_STOCKS.slice(0, 50); // Increased scan range
     setProgress({ current: 0, total: stocksToScan.length });
@@ -157,6 +161,47 @@ export default function Screener() {
           }
         }
 
+        // 4. Check momentum (买卖动能)
+        if (momentumEnabled) {
+          try {
+            const response = await fetch(`/api/trpc/stock.getMomentum?input=${encodeURIComponent(JSON.stringify({symbol}))}`);            if (response.ok) {
+              const data = await response.json();
+              const momentum = data.result?.data;
+              
+              if (momentum) {
+                const trendMap: Record<string, string> = {
+                  '强买': 'strong_buy',
+                  '弱买': 'weak_buy',
+                  '中立': 'neutral',
+                  '弱卖': 'weak_sell',
+                  '强卖': 'strong_sell',
+                };
+                
+                const trendKey = trendMap[momentum.trend];
+                
+                if (trendKey === momentumType) {
+                  const emojiMap: Record<string, string> = {
+                    'strong_buy': '🔴',
+                    'weak_buy': '🟠',
+                    'neutral': '⚪',
+                    'weak_sell': '🟢',
+                    'strong_sell': '🟢',
+                  };
+                  
+                  stockSignals.push({
+                    type: 'momentum',
+                    label: `${emojiMap[momentumType]} 买卖动能: ${momentum.trend}`,
+                    detail: `买压: ${momentum.buyLine.toFixed(0)} | 卖压: ${momentum.sellLine.toFixed(0)}`,
+                  });
+                }
+              }
+            }
+          } catch (err) {
+            console.error(`Error fetching momentum for ${symbol}:`, err);
+          }
+          await new Promise(r => setTimeout(r, 100));
+        }
+
         // Apply logic mode
         const uniqueConditionsMet = new Set(stockSignals.map(s => s.type)).size;
         
@@ -179,7 +224,7 @@ export default function Screener() {
 
     setResults(found);
     setLoading(false);
-  }, [bspEnabled, bspLevels, cdEnabled, cdLevels, ladderEnabled, ladderLevels, hasCondition, logicMode]);
+  }, [bspEnabled, bspLevels, cdEnabled, cdLevels, ladderEnabled, ladderLevels, momentumEnabled, momentumType, hasCondition, logicMode]);
 
   // Reusable level selector component
   const LevelSelector = ({ levels, setLevels, activeColor }: {
@@ -283,6 +328,46 @@ export default function Screener() {
               </button>
               {ladderEnabled && (
                 <LevelSelector levels={ladderLevels} setLevels={setLadderLevels} activeColor="bg-blue-500 text-white" />
+              )}
+            </div>
+
+            {/* Momentum (买卖动能) */}
+            <div className={`rounded-lg border p-4 transition-colors ${momentumEnabled ? 'border-cyan-500 bg-cyan-500/5' : 'border-border bg-card'}`}>
+              <button
+                onClick={() => setMomentumEnabled(!momentumEnabled)}
+                className="flex items-center gap-3 w-full text-left"
+              >
+                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${momentumEnabled ? 'border-cyan-500 bg-cyan-500' : 'border-muted-foreground'}`}>
+                  {momentumEnabled && <span className="text-white text-xs">✓</span>}
+                </div>
+                <Activity size={18} className={momentumEnabled ? 'text-cyan-500' : 'text-muted-foreground'} />
+                <div>
+                  <div className="text-sm font-medium">买卖动能筛选</div>
+                  <div className="text-xs text-muted-foreground">基于五档盘口的买卖动能分析</div>
+                </div>
+              </button>
+              {momentumEnabled && (
+                <div className="mt-3 ml-8 flex flex-wrap gap-2">
+                  {[
+                    { value: 'strong_buy', label: '强买', color: 'bg-red-500 text-white' },
+                    { value: 'weak_buy', label: '弱买', color: 'bg-orange-400 text-white' },
+                    { value: 'neutral', label: '中立', color: 'bg-gray-400 text-white' },
+                    { value: 'weak_sell', label: '弱卖', color: 'bg-green-300 text-white' },
+                    { value: 'strong_sell', label: '强卖', color: 'bg-green-500 text-white' },
+                  ].map(type => (
+                    <button
+                      key={type.value}
+                      onClick={() => setMomentumType(type.value as any)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                        momentumType === type.value
+                          ? type.color
+                          : 'bg-secondary text-secondary-foreground hover:bg-accent'
+                      }`}
+                    >
+                      {type.label}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           </div>

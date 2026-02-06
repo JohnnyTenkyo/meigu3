@@ -9,7 +9,7 @@ interface StockChartProps {
   interval: TimeInterval;
   cdSignals: CDSignal[];
   buySellPressure: BuySellPressure[];
-  momentum?: { buyLine: number; sellLine: number; diffBar: number; trend: string };
+  momentum?: { buyLine: number; sellLine: number; diffBar: number; trend: string; timestamp?: number };
   height?: number;
 }
 
@@ -309,36 +309,37 @@ export default function StockChart({ candles, interval, cdSignals, buySellPressu
     const buySeries = chart.addLineSeries({ 
       color: '#fbbf24', 
       lineWidth: 2, 
-      title: '\u4e70\u5355\u7d2f\u8ba1' 
+      title: '买单累计' 
     });
-    const buyData: LineData[] = candles.map(c => ({
-      time: toChartTime(c.time, interval),
+    // Use the latest momentum data point for all candles
+    const buyData: LineData[] = [{
+      time: toChartTime(momentum.timestamp || Date.now(), interval),
       value: momentum.buyLine || 0,
-    }));
+    }];
     buySeries.setData(buyData);
 
     // Green line: cumulative sell orders
     const sellSeries = chart.addLineSeries({ 
       color: '#22c55e', 
       lineWidth: 2, 
-      title: '\u5356\u5355\u7d2f\u8ba1' 
+      title: '卖单累计' 
     });
-    const sellData: LineData[] = candles.map(c => ({
-      time: toChartTime(c.time, interval),
+    const sellData: LineData[] = [{
+      time: toChartTime(momentum.timestamp || Date.now(), interval),
       value: momentum.sellLine || 0,
-    }));
+    }];
     sellSeries.setData(sellData);
 
     // Red/Green histogram: bid-ask difference
     const diffSeries = chart.addHistogramSeries({
       color: momentum.diffBar >= 0 ? '#ef4444' : '#22c55e',
-      title: '\u4e70\u5356\u5dee',
+      title: '买卖差',
     });
-    const diffData: HistogramData[] = candles.map(c => ({
-      time: toChartTime(c.time, interval),
+    const diffData: HistogramData[] = [{
+      time: toChartTime(momentum.timestamp || Date.now(), interval),
       value: momentum.diffBar || 0,
       color: momentum.diffBar >= 0 ? '#ef4444' : '#22c55e',
-    }));
+    }];
     diffSeries.setData(diffData);
 
     chart.timeScale().fitContent();
@@ -409,6 +410,13 @@ export default function StockChart({ candles, interval, cdSignals, buySellPressu
             <span className="font-medium text-cyan-400">副图</span>
             <span className="text-cyan-400">买卖动能</span>
             <span className="text-xs">黄线=买单 | 绿线=卖单 | 红柱=买压 | 绿柱=卖压</span>
+            <span className={`text-xs font-semibold ml-2 ${
+              momentum.trend === '强买' ? 'text-red-500' :
+              momentum.trend === '弱买' ? 'text-orange-400' :
+              momentum.trend === '强卖' ? 'text-green-500' :
+              momentum.trend === '弱卖' ? 'text-green-300' :
+              'text-gray-400'
+            }`}>【{momentum.trend}】</span>
           </div>
           <div ref={momentumChartRef} className="w-full rounded-md overflow-hidden border border-border" />
         </>

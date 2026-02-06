@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useLocation } from 'wouter';
-import { ArrowLeft, Star, Loader2 } from 'lucide-react';
+import { ArrowLeft, Star, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import StockChart from '@/components/StockChart';
 import SignalPanel from '@/components/SignalPanel';
 import LoginDialog from '@/components/LoginDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWatchlist } from '@/contexts/WatchlistContext';
+import { useMomentumWebSocket } from '@/hooks/useMomentumWebSocket';
 import { fetchStockData, fetchStockQuote } from '@/lib/stockApi';
 import { calculateCDSignals, calculateBuySellPressure, calculateNXSignals } from '@/lib/indicators';
 import { Candle, TimeInterval, CDSignal, BuySellPressure, NXSignal, StockQuote } from '@/lib/types';
@@ -41,7 +42,16 @@ export default function StockDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
-  const [momentum, setMomentum] = useState<any>(null);
+  const [useLiveData, setUseLiveData] = useState(false);
+  
+  // WebSocket买卖动能数据
+  const { momentum: wsMomentum, isConnected, refresh: refreshMomentum } = useMomentumWebSocket(symbol);
+  
+  // 缓存的买卖动能数据
+  const [cachedMomentum, setCachedMomentum] = useState<any>(null);
+  
+  // 根据开关选择使用哪个数据源
+  const momentum = useLiveData ? wsMomentum : cachedMomentum;
 
   // Fetch data
   useEffect(() => {
@@ -66,21 +76,22 @@ export default function StockDetail() {
     return () => { cancelled = true; };
   }, [symbol, interval]);
 
-  // Fetch momentum data
+  // Fetch cached momentum data
   useEffect(() => {
+    if (useLiveData) return; // 如果使用实时数据，跳过缓存加载
+    
     const fetchMomentum = async () => {
       try {
-        const response = await fetch(`/api/trpc/stock.getMomentum?input=${encodeURIComponent(JSON.stringify({symbol}))}`);
-        if (response.ok) {
+        const response = await fetch(`/api/trpc/stock.getMomentum?input=${encodeURIComponent(JSON.stringify({symbol}))}`);        if (response.ok) {
           const data = await response.json();
-          setMomentum(data.result?.data || null);
+          setCachedMomentum(data.result?.data || null);
         }
       } catch (err) {
         console.error('Failed to fetch momentum:', err);
       }
     };
     fetchMomentum();
-  }, [symbol]);
+  }, [symbol, useLiveData]);;
 
   // Calculate indicators
   const cdSignals = useMemo<CDSignal[]>(() => calculateCDSignals(candles), [candles]);
@@ -123,6 +134,33 @@ export default function StockDetail() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mr-2">
+              <span className="text-xs text-muted-foreground">实时动能</span>
+              <button
+                onClick={() => setUseLiveData(!useLiveData)}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                  useLiveData ? 'bg-primary' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    useLiveData ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+              {useLiveData && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={refreshMomentum}
+                  className="gap-1 h-7 px-2"
+                  disabled={!isConnected}
+                >
+                  <RefreshCw size={14} className={isConnected ? '' : 'opacity-50'} />
+                  <span className="text-xs">刷新</span>
+                </Button>
+              )}
+            </div>
             <Button variant="ghost" size="sm" onClick={handleFavorite} className="gap-1">
               <Star size={16} className={isFav ? 'fill-yellow-400 text-yellow-400' : ''} />
               {isFav ? '已收藏' : '收藏'}
